@@ -1,8 +1,11 @@
-from fastapi import FastAPI, HTTPException
-from fastapi.openapi.utils import get_openapi
+import logging
+from fastapi import FastAPI, HTTPException, Query
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
-from sql_chain import natural_to_sql
+from sql_chain import natural_to_sql, ForbiddenOperationError
 from db import get_schema, execute_query
+
+logger = logging.getLogger("atal-ia")
 
 app = FastAPI(
     title="Natural Language to SQL API",
@@ -24,6 +27,13 @@ app = FastAPI(
     license_info={
         "name": "MIT",
     },
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 
@@ -49,17 +59,12 @@ class QueryRequest(BaseModel):
 
 
 class QueryResponse(BaseModel):
-    sql: str = Field(
-        ...,
-        title="Consulta SQL generada",
-        description="Sentencia T-SQL ejecutada en SQL Server.",
-        examples=["SELECT TOP 10 cliente_id, COUNT(*) AS total_pedidos FROM pedidos GROUP BY cliente_id ORDER BY total_pedidos DESC"],
-    )
-    results: list[dict] = Field(
-        ...,
-        title="Resultados",
-        description="Filas devueltas por la consulta.",
-    )
+    sql: str = Field(..., title="Consulta SQL generada", description="Sentencia T-SQL ejecutada en SQL Server.")
+    results: list[dict] = Field(..., title="Resultados", description="Filas de la página actual.")
+    total: int = Field(..., description="Total de filas que devuelve la consulta.")
+    page: int = Field(..., description="Página actual.")
+    page_size: int = Field(..., description="Filas por página (máx 100).")
+    total_pages: int = Field(..., description="Total de páginas.")
 
 
 class ErrorResponse(BaseModel):
@@ -76,27 +81,39 @@ class SchemaResponse(BaseModel):
     "/query",
     response_model=QueryResponse,
     responses={
-        200: {"description": "SQL generado exitosamente."},
-        400: {"model": ErrorResponse, "description": "La pregunta generó una operación DML/DDL no permitida."},
-        500: {"model": ErrorResponse, "description": "Error interno al procesar la consulta."},
+        200: {"description": "Consulta ejecutada exitosamente."},
+        400: {"model": ErrorResponse, "description": "Operación DML/DDL no permitida."},
+        500: {"model": ErrorResponse, "description": "Error interno."},
     },
-    summary="Traducir lenguaje natural a SQL",
+    summary="Traducir lenguaje natural a SQL y ejecutar",
     description=(
-        "Recibe una pregunta en lenguaje natural y devuelve la consulta T-SQL equivalente "
-        "para ejecutarse sobre la base de datos **DonaldV2**.\n\n"
-        "Solo se generan sentencias `SELECT`. Cualquier otra operación es rechazada."
+        "Recibe una pregunta en lenguaje natural, genera el T-SQL y devuelve los resultados paginados.\n\n"
+        "Solo se permiten sentencias `SELECT`. Máximo **100 filas** por página."
     ),
     tags=["Consultas"],
 )
-def query(request: QueryRequest):
+def query(
+    request: QueryRequest,
+    page: int = Query(default=1, ge=1, description="Número de página"),
+    page_size: int = Query(default=50, ge=1, le=100, description="Filas por página (máx 100)"),
+):
     try:
         sql = natural_to_sql(request.question)
-        results = execute_query(sql)
-        return QueryResponse(sql=sql, results=results)
-    except ValueError as e:
+        results, total = execute_query(sql, page=page, page_size=page_size)
+        import math
+        return QueryResponse(
+            sql=sql,
+            results=results,
+            total=total,
+            page=page,
+            page_size=page_size,
+            total_pages=math.ceil(total / page_size) if total else 0,
+        )
+    except ForbiddenOperationError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error al procesar la consulta: {str(e)}")
+        logger.error("Error ejecutando consulta: %s", e, exc_info=True)
+        raise HTTPException(status_code=500, detail="No se pudo procesar la consulta. Intenta reformular tu pregunta.")
 
 
 @app.get(

@@ -60,9 +60,14 @@ def get_schema() -> str:
     )
 
 
-def execute_query(sql: str) -> list[dict]:
+def execute_query(sql: str, page: int = 1, page_size: int = 100) -> tuple[list[dict], int]:
     engine = get_engine()
+    offset = (page - 1) * page_size
+    paginated_sql = f"SELECT * FROM ({sql}) AS _q ORDER BY (SELECT NULL) OFFSET {offset} ROWS FETCH NEXT {page_size} ROWS ONLY"
+    count_sql = f"SELECT COUNT(*) FROM ({sql}) AS _q"
     with engine.connect() as conn:
-        result = conn.execute(text(sql))
+        total = conn.execute(text(count_sql)).scalar()
+        result = conn.execute(text(paginated_sql))
         columns = list(result.keys())
-        return [dict(zip(columns, row)) for row in result.fetchall()]
+        rows = [dict(zip(columns, row)) for row in result.fetchall()]
+    return rows, total

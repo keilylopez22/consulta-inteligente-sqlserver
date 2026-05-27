@@ -32,15 +32,30 @@ _llm = ChatGoogleGenerativeAI(
 _chain = _PROMPT | _llm
 
 
+class ForbiddenOperationError(ValueError):
+    pass
+
+
 def natural_to_sql(question: str) -> str:
     schema = get_schema()
     result = _chain.invoke({"question": question, "schema": schema})
     sql = result.content.strip()
 
-    if _FORBIDDEN.search(sql):
-        raise ValueError("La consulta generada contiene operaciones no permitidas (DML/DDL).")
+    forbidden_match = _FORBIDDEN.search(sql)
+    if forbidden_match:
+        op = forbidden_match.group(1).upper()
+        print(f"[SEGURIDAD] Operación prohibida detectada: {op} | Pregunta: '{question}' | SQL generado: {sql}")
+        raise ForbiddenOperationError(
+            f"⛔ Operación '{op}' no permitida. "
+            "Atal-IA solo puede realizar consultas de lectura (SELECT). "
+            "No está autorizado para modificar, eliminar ni crear datos."
+        )
 
     if not re.match(r"^\s*SELECT\b", sql, re.IGNORECASE):
-        raise ValueError("Solo se permiten consultas SELECT.")
+        print(f"[SEGURIDAD] SQL no-SELECT generado | Pregunta: '{question}' | SQL: {sql}")
+        raise ForbiddenOperationError(
+            "⛔ Solo se permiten consultas de lectura. "
+            "No puedo ejecutar operaciones que modifiquen la base de datos."
+        )
 
     return sql
