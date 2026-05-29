@@ -1,5 +1,5 @@
 import logging
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from sql_chain import natural_to_sql, ForbiddenOperationError
@@ -60,11 +60,8 @@ class QueryRequest(BaseModel):
 
 class QueryResponse(BaseModel):
     sql: str = Field(..., title="Consulta SQL generada", description="Sentencia T-SQL ejecutada en SQL Server.")
-    results: list[dict] = Field(..., title="Resultados", description="Filas de la página actual.")
-    total: int = Field(..., description="Total de filas que devuelve la consulta.")
-    page: int = Field(..., description="Página actual.")
-    page_size: int = Field(..., description="Filas por página (máx 100).")
-    total_pages: int = Field(..., description="Total de páginas.")
+    results: list[dict] = Field(..., title="Resultados", description="Filas devueltas por la consulta.")
+    total: int = Field(..., description="Total de filas devueltas.")
 
 
 class ErrorResponse(BaseModel):
@@ -86,29 +83,14 @@ class SchemaResponse(BaseModel):
         500: {"model": ErrorResponse, "description": "Error interno."},
     },
     summary="Traducir lenguaje natural a SQL y ejecutar",
-    description=(
-        "Recibe una pregunta en lenguaje natural, genera el T-SQL y devuelve los resultados paginados.\n\n"
-        "Solo se permiten sentencias `SELECT`. Máximo **100 filas** por página."
-    ),
+    description="Recibe una pregunta en lenguaje natural, genera el T-SQL y devuelve los resultados.\n\nSolo se permiten sentencias `SELECT`.",
     tags=["Consultas"],
 )
-def query(
-    request: QueryRequest,
-    page: int = Query(default=1, ge=1, description="Número de página"),
-    page_size: int = Query(default=50, ge=1, le=100, description="Filas por página (máx 100)"),
-):
+def query(request: QueryRequest):
     try:
         sql = natural_to_sql(request.question)
-        results, total = execute_query(sql, page=page, page_size=page_size)
-        import math
-        return QueryResponse(
-            sql=sql,
-            results=results,
-            total=total,
-            page=page,
-            page_size=page_size,
-            total_pages=math.ceil(total / page_size) if total else 0,
-        )
+        results = execute_query(sql)
+        return QueryResponse(sql=sql, results=results, total=len(results))
     except ForbiddenOperationError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:

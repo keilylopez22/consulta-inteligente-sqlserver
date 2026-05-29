@@ -10,22 +10,25 @@ _engine = None
 def get_engine():
     global _engine
     if _engine is None:
-        server = os.getenv("DB_SERVER", "192.168.1.101")
+        server = os.getenv("DB_SERVER", "192.168.1.10")
         database = os.getenv("DB_NAME", "DonaldV2")
         username = os.getenv("DB_USER", "")
         password = os.getenv("DB_PASSWORD", "")
 
         if username and password:
-            conn_str = (
-                f"mssql+pyodbc://{username}:{password}@{server}/{database}"
-                "?driver=ODBC+Driver+17+for+SQL+Server"
+            odbc = (
+                f"DRIVER={{ODBC Driver 17 for SQL Server}};"
+                f"SERVER={server};DATABASE={database};"
+                f"UID={username};PWD={password};"
             )
         else:
-            conn_str = (
-                f"mssql+pyodbc://{server}/{database}"
-                "?driver=ODBC+Driver+17+for+SQL+Server&trusted_connection=yes"
+            odbc = (
+                f"DRIVER={{ODBC Driver 17 for SQL Server}};"
+                f"SERVER={server};DATABASE={database};"
+                "Trusted_Connection=yes;"
             )
 
+        conn_str = f"mssql+pyodbc:///?odbc_connect={odbc}"
         _engine = create_engine(conn_str)
     return _engine
 
@@ -60,14 +63,9 @@ def get_schema() -> str:
     )
 
 
-def execute_query(sql: str, page: int = 1, page_size: int = 100) -> tuple[list[dict], int]:
+def execute_query(sql: str) -> list[dict]:
     engine = get_engine()
-    offset = (page - 1) * page_size
-    paginated_sql = f"SELECT * FROM ({sql}) AS _q ORDER BY (SELECT NULL) OFFSET {offset} ROWS FETCH NEXT {page_size} ROWS ONLY"
-    count_sql = f"SELECT COUNT(*) FROM ({sql}) AS _q"
     with engine.connect() as conn:
-        total = conn.execute(text(count_sql)).scalar()
-        result = conn.execute(text(paginated_sql))
+        result = conn.execute(text(sql))
         columns = list(result.keys())
-        rows = [dict(zip(columns, row)) for row in result.fetchall()]
-    return rows, total
+        return [dict(zip(columns, row)) for row in result.fetchall()]
