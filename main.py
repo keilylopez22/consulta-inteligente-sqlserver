@@ -1,5 +1,5 @@
 import logging
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from sql_chain import natural_to_sql, ForbiddenOperationError
@@ -59,9 +59,11 @@ class QueryRequest(BaseModel):
 
 
 class QueryResponse(BaseModel):
-    sql: str = Field(..., title="Consulta SQL generada", description="Sentencia T-SQL ejecutada en SQL Server.")
-    results: list[dict] = Field(..., title="Resultados", description="Filas devueltas por la consulta.")
-    total: int = Field(..., description="Total de filas devueltas.")
+    sql: str = Field(..., description="Sentencia T-SQL ejecutada en SQL Server.")
+    results: list[dict] = Field(..., description="Filas de la página actual.")
+    page: int = Field(..., description="Página actual.")
+    page_size: int = Field(..., description="Filas por página.")
+    has_more: bool = Field(..., description="Indica si hay más páginas.")
 
 
 class ErrorResponse(BaseModel):
@@ -86,11 +88,15 @@ class SchemaResponse(BaseModel):
     description="Recibe una pregunta en lenguaje natural, genera el T-SQL y devuelve los resultados.\n\nSolo se permiten sentencias `SELECT`.",
     tags=["Consultas"],
 )
-def query(request: QueryRequest):
+def query(
+    request: QueryRequest,
+    page: int = Query(default=1, ge=1, description="Número de página"),
+    page_size: int = Query(default=100, ge=1, le=100, description="Filas por página (máx 100)"),
+):
     try:
         sql = natural_to_sql(request.question)
-        results = execute_query(sql)
-        return QueryResponse(sql=sql, results=results, total=len(results))
+        results, has_more = execute_query(sql, page=page, page_size=page_size)
+        return QueryResponse(sql=sql, results=results, page=page, page_size=page_size, has_more=has_more)
     except ForbiddenOperationError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:

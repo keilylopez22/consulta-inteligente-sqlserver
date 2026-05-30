@@ -4,25 +4,20 @@ const BOT_AVATAR = '🤖';
 const USER_AVATAR = '👤';
 
 function Pagination({ pagination, onPageChange }) {
-  const { page, total_pages, question } = pagination;
-  const btnStyle = (disabled) => ({
-    background: disabled ? 'var(--surface)' : 'var(--surface2)',
-    border: '1px solid var(--border)',
-    borderRadius: '8px', padding: '4px 12px',
-    color: disabled ? 'var(--text-muted)' : 'var(--text)',
-    cursor: disabled ? 'not-allowed' : 'pointer',
-    fontSize: '0.8rem', transition: 'all 0.2s',
-  });
-
+  const { page, question } = pagination;
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '8px', flexWrap: 'wrap' }}>
-      <button style={btnStyle(page <= 1)} disabled={page <= 1} onClick={() => onPageChange(question, 1)}>« Primera</button>
-      <button style={btnStyle(page <= 1)} disabled={page <= 1} onClick={() => onPageChange(question, page - 1)}>‹ Anterior</button>
-      <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)', padding: '0 4px' }}>
-        Página <strong style={{ color: 'var(--text)' }}>{page}</strong> de <strong style={{ color: 'var(--text)' }}>{total_pages}</strong>
-      </span>
-      <button style={btnStyle(page >= total_pages)} disabled={page >= total_pages} onClick={() => onPageChange(question, page + 1)}>Siguiente ›</button>
-      <button style={btnStyle(page >= total_pages)} disabled={page >= total_pages} onClick={() => onPageChange(question, total_pages)}>Última »</button>
+    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '8px' }}>
+      <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>Página {page}</span>
+      <button
+        onClick={() => onPageChange(question, page + 1)}
+        style={{
+          background: 'var(--surface2)', border: '1px solid var(--accent)',
+          borderRadius: '8px', padding: '4px 14px', color: 'var(--accent2)',
+          cursor: 'pointer', fontSize: '0.8rem', transition: 'all 0.2s',
+        }}
+      >
+        Ver siguientes 100 ›
+      </button>
     </div>
   );
 }

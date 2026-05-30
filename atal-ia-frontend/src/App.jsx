@@ -50,23 +50,18 @@ export default function App() {
     setLoading(true);
 
     try {
-      const data = await fetchPage(null, question, 1, 50);
+      const data = await fetchPage(null, question, 1, 100);
       const count = data.results?.length ?? 0;
       const summary = count === 0
         ? 'La consulta no devolvió resultados.'
-        : `Encontré **${data.total}** registro${data.total !== 1 ? 's' : ''} en total. Mostrando página ${data.page} de ${data.total_pages}:`;
+        : `Encontré ${count} registro${count !== 1 ? 's' : ''}${data.has_more ? '. Mostrando los primeros 100:' : ':'}` ;
 
       setMessages(prev => [...prev, {
         role: 'bot',
         text: summary,
         sql: data.sql,
         results: data.results,
-        pagination: data.total_pages > 1 ? {
-          page: data.page,
-          total_pages: data.total_pages,
-          total: data.total,
-          question,
-        } : null,
+        pagination: data.has_more ? { page: data.page, question } : null,
         time: now(),
       }]);
     } catch (err) {
@@ -85,18 +80,14 @@ export default function App() {
   async function goToPage(question, page) {
     setLoading(true);
     try {
-      const data = await fetchPage(null, question, page, 50);
+      const data = await fetchPage(null, question, page, 100);
+      const count = data.results?.length ?? 0;
       setMessages(prev => [...prev, {
         role: 'bot',
-        text: `Página ${data.page} de ${data.total_pages} · ${data.total} registros en total:`,
+        text: `Página ${data.page} · ${count} registro${count !== 1 ? 's' : ''}${data.has_more ? ':' : ' (fin de resultados):'}`,
         sql: data.sql,
         results: data.results,
-        pagination: data.total_pages > 1 ? {
-          page: data.page,
-          total_pages: data.total_pages,
-          total: data.total,
-          question,
-        } : null,
+        pagination: data.has_more ? { page: data.page, question } : null,
         time: now(),
       }]);
     } catch (err) {
